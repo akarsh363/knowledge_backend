@@ -23,6 +23,7 @@ namespace Project_Version1.DTOs
         public string Token { get; set; } = null!;
         public int UserId { get; set; }
         public string Role { get; set; } = null!;
+        public string DepartmentId { get; set; } = null!;
         public string? ProfilePicture { get; set; } // ✅ return stored path
     }
 }

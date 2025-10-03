@@ -127,6 +127,7 @@ namespace Project_Version1.Services
                 UserId = user.UserId,
 
                 Role = user.Role ?? "Employee",
+                DepartmentId = user.DepartmentId.ToString(),
 
                 ProfilePicture = user.ProfilePicture
 
@@ -153,7 +154,7 @@ namespace Project_Version1.Services
                 Token = token,
 
                 UserId = user.UserId,
-
+                DepartmentId = user.DepartmentId.ToString(),
                 Role = user.Role ?? "Employee",
 
                 ProfilePicture = user.ProfilePicture

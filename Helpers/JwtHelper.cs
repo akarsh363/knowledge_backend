@@ -30,7 +30,7 @@ namespace Project_Version1.Helpers
                 new Claim(ClaimTypes.Name, user.FullName ?? string.Empty),
                 new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
                 new Claim(ClaimTypes.Role, user.Role ?? "Employee"),
-                new Claim("DeptId", user.DepartmentId.ToString()) // Fixed: int does not need null check
+                new Claim("DepartmentId", user.DepartmentId.ToString()) // Fixed: int does not need null check
             };
 
             var token = new JwtSecurityToken(

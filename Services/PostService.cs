@@ -1,14 +1,15 @@
-﻿using System;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Project_Version1.Data;
+using Project_Version1.DTOs;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using AutoMapper;
-using Project_Version1.Data;
-using Project_Version1.DTOs;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 
 namespace Project_Version1.Services
 {
@@ -149,6 +150,7 @@ namespace Project_Version1.Services
 
         public async Task<List<PostBriefDto>> GetPostsFeedAsync(int? deptId, string? tag, int page, int pageSize)
         {
+            // Build base query
             var query = _db.Posts.AsQueryable();
 
             if (deptId.HasValue)
@@ -159,15 +161,62 @@ namespace Project_Version1.Services
 
             query = query.OrderByDescending(p => p.CreatedAt);
 
-            var paged = query.Skip((page - 1) * pageSize).Take(pageSize);
-
-            var posts = await paged
+            // Apply paging and include related collections we need
+            var paged = query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Include(p => p.User)
+                .Include(p => p.PostTags).ThenInclude(pt => pt.Tag)
                 .Include(p => p.Comments)
                 .Include(p => p.Reposts).ThenInclude(r => r.User)
-                .ToListAsync();
+                .Include(p => p.Votes); // include votes to compute up/down counts
 
-            return _mapper.Map<List<PostBriefDto>>(posts);
+            var posts = await paged.ToListAsync();
+
+            // Project into PostBriefDto and include Reposts
+            var result = posts.Select(p =>
+            {
+                // safe helpers for counts
+                var upvoteCount = p.Votes?.Count(v => v.PostId == p.PostId && v.CommentId == null && string.Equals(v.VoteType, "Upvote", StringComparison.OrdinalIgnoreCase)) ?? 0;
+                var downvoteCount = p.Votes?.Count(v => v.PostId == p.PostId && v.CommentId == null && string.Equals(v.VoteType, "Downvote", StringComparison.OrdinalIgnoreCase)) ?? 0;
+                var commentsCount = p.Comments?.Count ?? 0;
+
+                // Map reposts collection into RepostBriefDto list (if any)
+                List<RepostBriefDto>? reposts = null;
+                if (p.Reposts != null && p.Reposts.Any())
+                {
+                    reposts = p.Reposts
+                        .OrderByDescending(r => r.CreatedAt)
+                        .Select(r => new RepostBriefDto
+                        {
+                            RepostId = r.RepostId,
+                            UserId = r.UserId,
+                            UserName = r.User?.FullName ?? null,
+                            CreatedAt = r.CreatedAt
+                        })
+                        .ToList();
+                }
+
+                return new PostBriefDto
+                {
+                    PostId = p.PostId,
+                    Title = p.Title ?? string.Empty,
+                    BodyPreview = p.Body ?? string.Empty,
+                    UpvoteCount = upvoteCount,
+                    DownvoteCount = downvoteCount,
+                    CommentsCount = commentsCount,
+                    CreatedAt = p.CreatedAt,
+                    AuthorName = p.User?.FullName,
+                    // ✅ include userId & deptId so frontend can evaluate ownership/department
+                    UserId = p.UserId.ToString(),
+                    DeptId = p.DeptId.ToString(),
+                    IsRepost = false, // this DTO represents the original post row; repost entries are represented via the Reposts list
+                    RepostedBy = null,
+                    Reposts = reposts
+                };
+            }).ToList();
+
+            return result;
         }
 
         public async Task UpdatePostAsync(Post post)

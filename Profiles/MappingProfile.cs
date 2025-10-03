@@ -1,8 +1,8 @@
-﻿// Profiles/MappingProfile.cs - Updated comment mappings
-using AutoMapper;
+﻿using AutoMapper;
 using Project_Version1.Data;
 using Project_Version1.DTOs;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace Project_Version1.Profiles
 {
@@ -10,7 +10,6 @@ namespace Project_Version1.Profiles
     {
         public MappingProfile()
         {
-            // User mappings (unchanged)
             CreateMap<User, UserDto>()
                 .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role ?? "Employee"))
                 .ForMember(dest => dest.ProfilePicture, opt => opt.MapFrom(src => src.ProfilePicture));
@@ -32,7 +31,7 @@ namespace Project_Version1.Profiles
                 .ForMember(dest => dest.UserId, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
 
-            // Post mappings (unchanged)
+            // Post create -> entity
             CreateMap<PostCreateDto, Post>()
                 .ForMember(dest => dest.PostId, opt => opt.Ignore())
                 .ForMember(dest => dest.UserId, opt => opt.Ignore())
@@ -44,20 +43,49 @@ namespace Project_Version1.Profiles
                 .ForMember(dest => dest.Attachments, opt => opt.Ignore())
                 .ForMember(dest => dest.PostTags, opt => opt.Ignore());
 
+            // Post -> PostBriefDto
             CreateMap<Post, PostBriefDto>()
                 .ForMember(dest => dest.BodyPreview, opt => opt.MapFrom(src =>
                     string.IsNullOrEmpty(src.Body) ? string.Empty :
                     src.Body.Length > 200 ? src.Body.Substring(0, 200) + "..." : src.Body))
+                .ForMember(dest => dest.DeptId, opt => opt.MapFrom(src => src.DeptId.ToString()))
+                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId.ToString()))
                 .ForMember(dest => dest.UpvoteCount, opt => opt.MapFrom(src => src.UpvoteCount ?? 0))
                 .ForMember(dest => dest.DownvoteCount, opt => opt.MapFrom(src => src.DownvoteCount ?? 0))
-                .ForMember(dest => dest.CommentsCount, opt => opt.MapFrom(src =>
-                    src.Comments != null ? src.Comments.Count : 0))
+                .ForMember(dest => dest.CommentsCount, opt => opt.MapFrom(src => src.Comments != null ? src.Comments.Count : 0))
                 .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
-                .ForMember(dest => dest.IsRepost, opt => opt.MapFrom(src => src.IsRepost))
+                // RepostedBy: use Select(...).FirstOrDefault() to avoid null-propagating operator
                 .ForMember(dest => dest.RepostedBy, opt => opt.MapFrom(src =>
-                    src.Reposts.OrderByDescending(r => r.CreatedAt).FirstOrDefault().User.FullName));
+                    src.Reposts != null
+                        ? src.Reposts.OrderByDescending(r => r.CreatedAt).Select(r => r.User.FullName).FirstOrDefault()
+                        : null));
 
-            // Comment mappings - Updated to ignore vote fields (handled in service)
+            // Post -> PostDetailDto
+            CreateMap<Post, PostDetailDto>()
+                .ForMember(dest => dest.Body, opt => opt.MapFrom(src => src.Body ?? string.Empty))
+                .ForMember(dest => dest.UpvoteCount, opt => opt.MapFrom(src => src.UpvoteCount ?? 0))
+                .ForMember(dest => dest.DownvoteCount, opt => opt.MapFrom(src => src.DownvoteCount ?? 0))
+                .ForMember(dest => dest.CommentsCount, opt => opt.MapFrom(src => src.Comments != null ? src.Comments.Count : 0))
+                .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
+                .ForMember(dest => dest.DepartmentName, opt => opt.MapFrom(src => src.Dept != null ? src.Dept.DeptName : null))
+                .ForMember(dest => dest.Tags, opt => opt.MapFrom(src => src.PostTags != null ? src.PostTags.Select(pt => pt.Tag.TagName).ToList() : new List<string>()))
+                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId))
+                .ForMember(dest => dest.DeptId, opt => opt.MapFrom(src => src.DeptId))
+                .ForMember(dest => dest.Attachments, opt => opt.MapFrom(src => src.Attachments))
+                .ForMember(dest => dest.RepostedBy, opt => opt.MapFrom(src =>
+                    src.Reposts != null
+                        ? src.Reposts.OrderByDescending(r => r.CreatedAt).Select(r => r.User.FullName).FirstOrDefault()
+                        : null));
+
+            CreateMap<Attachment, AttachmentDto>();
+
+            // Tag -> TagDto (required by TagsController.ProjectTo<TagDto>)
+            CreateMap<Tag, TagDto>();
+
+            // Department -> DepartmentDto (fixes CategoriesController 500 error)
+            CreateMap<Department, DepartmentDto>();
+
+            // Comment mappings...
             CreateMap<CommentCreateDto, Comment>()
                 .ForMember(dest => dest.CommentId, opt => opt.Ignore())
                 .ForMember(dest => dest.UserId, opt => opt.Ignore())
@@ -66,58 +94,30 @@ namespace Project_Version1.Profiles
 
             CreateMap<Comment, CommentDto>()
                 .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
-                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.UserVote, opt => opt.Ignore()); // Set in service
+                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.UserVote, opt => opt.Ignore());
 
             CreateMap<Comment, CommentWithRepliesDto>()
                 .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
-                .ForMember(dest => dest.Replies, opt => opt.Ignore()) // Built manually in service
-                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.UserVote, opt => opt.Ignore()); // Set in service
+                .ForMember(dest => dest.Replies, opt => opt.Ignore())
+                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.UserVote, opt => opt.Ignore());
 
             CreateMap<Comment, CommentDetailDto>()
                 .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(src => src.CommentText == "[Comment deleted]"))
-                .ForMember(dest => dest.ReplyCount, opt => opt.MapFrom(src =>
-                    src.InverseParentComment != null ? src.InverseParentComment.Count : 0))
-                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore()) // Set in service
-                .ForMember(dest => dest.UserVote, opt => opt.Ignore()); // Set in service
+                .ForMember(dest => dest.ReplyCount, opt => opt.MapFrom(src => src.InverseParentComment != null ? src.InverseParentComment.Count : 0))
+                .ForMember(dest => dest.UpvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.DownvoteCount, opt => opt.Ignore())
+                .ForMember(dest => dest.UserVote, opt => opt.Ignore());
 
-            // Vote mappings (unchanged)
+            // Vote mapping
             CreateMap<VoteDto, Vote>()
                 .ForMember(dest => dest.VoteId, opt => opt.Ignore())
                 .ForMember(dest => dest.UserId, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
-
-            // Tag and Department mappings (unchanged)
-            CreateMap<Tag, TagDto>()
-                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId))
-                .ForMember(dest => dest.TagName, opt => opt.MapFrom(src => src.TagName))
-                .ForMember(dest => dest.DeptId, opt => opt.MapFrom(src => src.DeptId));
-
-            CreateMap<Department, DepartmentDto>()
-                .ForMember(dest => dest.DeptId, opt => opt.MapFrom(src => src.DeptId))
-                .ForMember(dest => dest.DeptName, opt => opt.MapFrom(src => src.DeptName));
-
-            CreateMap<Post, PostDetailDto>()
-                .ForMember(dest => dest.Body, opt => opt.MapFrom(src => src.Body))  // Full body
-                .ForMember(dest => dest.UpvoteCount, opt => opt.MapFrom(src => src.UpvoteCount ?? 0))
-                .ForMember(dest => dest.DownvoteCount, opt => opt.MapFrom(src => src.DownvoteCount ?? 0))
-                .ForMember(dest => dest.CommentsCount, opt => opt.MapFrom(src =>
-                    src.Comments != null ? src.Comments.Count : 0))
-                .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.User.FullName))
-                .ForMember(dest => dest.DepartmentName, opt => opt.MapFrom(src => src.Dept.DeptName))
-                .ForMember(dest => dest.Tags, opt => opt.MapFrom(src =>
-                    src.PostTags.Select(pt => pt.Tag.TagName).ToList()))
-                .ForMember(dest => dest.Attachments, opt => opt.MapFrom(src => src.Attachments))
-                .ForMember(dest => dest.IsRepost, opt => opt.MapFrom(src => src.IsRepost))
-                .ForMember(dest => dest.RepostedBy, opt => opt.MapFrom(src =>
-                    src.Reposts.OrderByDescending(r => r.CreatedAt).FirstOrDefault().User.FullName));
-
-            CreateMap<Attachment, AttachmentDto>();
         }
     }
 }
