@@ -17,5 +17,5 @@ public partial class Commit
 
     public virtual Manager Manager { get; set; } = null!;
 
-    public virtual Post? Post { get; set; } 
+    public virtual Post? Post { get; set; }
 }
